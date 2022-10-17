@@ -1,0 +1,70 @@
+---
+title: "HW2"
+author: "Roy Zhang"
+date: "2022-10-06"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(magrittr)
+library(yardstick)
+abalone = read_csv("abalone.csv")
+```
+
+Question 1.
+```{r}
+abalone %<>% mutate(age = abalone$rings + 1.5)
+hist(abalone$age, main = "Age Distribution", xlab = "Age")
+```
+The distribution of the data is skewed to the right. The range of the data is between 0 and 30. Most of the data points are between 8 and 14. 
+
+Question 2.
+```{r}
+set.seed(1)
+split = initial_split(abalone, strata = age)
+training_set = training(split)
+testing_set = testing(split)
+```
+Question 3.
+```{r}
+abalone_recipe <- recipe(age ~ ., data = select(training_set, -rings)) %>%
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact(terms = ~starts_with("type"):shucked_weight) %>%
+  step_interact(terms = ~longest_shell:diameter) %>%
+  step_interact(terms = ~shucked_weight:shell_weight) %>%
+  step_normalize(all_predictors())
+```
+Question 4.
+```{r}
+lr_object = set_engine(linear_reg(), "lm")
+```
+Question 5.
+```{r}
+abalone_workflow = workflow() %>%
+  add_model(lr_object) %>%
+  add_recipe(abalone_recipe)
+```
+Question 6.
+```{r}
+abalone_fit = fit(abalone_workflow, training_set)
+hypothetical_prediction = abalone_fit %>%
+  predict(tibble(type = "F", longest_shell = 0.50, diameter = 0.10, 
+                 height = 0.30, whole_weight = 4, shucked_weight = 1,
+                 viscera_weight = 2, shell_weight = 1))
+```
+The predicted age of the hypothetical abalone is `r hypothetical_prediction$.pred`.
+
+Question 7.
+```{r}
+assessment_set = metric_set(rsq, rmse, mae)
+training_prediction = predict(abalone_fit, training_set)
+predicted_vs_actual = bind_cols(predicted = training_prediction$.pred,
+                                actual = training_set$age)
+assessment_outcome = assessment_set(predicted_vs_actual, truth = actual,
+                                    estimate = predicted)
+```
+The R-squared value is `r assessment_outcome$.estimate[1]`, the RMSE is `r assessment_outcome$.estimate[2]`, and the MAE is `r assessment_outcome$.estimate[3]`.
+
+According to the R-squared value, `r assessment_outcome$.estimate[1]*100`% of the variability of the abalone's age can be explained by this regression. model.
